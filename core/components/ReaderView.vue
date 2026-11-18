@@ -245,8 +245,9 @@ div {
         display: flex;
         flex-direction: row;
         align-items: center;
-        opacity: 0.5;
-        background-color: black;
+        background-color: rgba(0, 0, 0, 0.5);
+        transform: translateZ(0);
+        contain: layout paint style;
         padding: 3px 5px;
         gap: 3px;
         > .progress {
@@ -255,7 +256,7 @@ div {
             align-items: center;
             font-size: 11px;
             line-height: 11px;
-            color: white
+            color: rgba(255, 255, 255, 0.72);
         }
         > .full-screen {
             display: flex;
@@ -266,8 +267,7 @@ div {
             background: transparent;
             cursor: pointer;
             padding: 0;
-            color: white;
-            transition: color 0.2s ease;
+            color: rgba(255, 255, 255, 0.72);
             &:hover {
                 color: $accent_color;
             }

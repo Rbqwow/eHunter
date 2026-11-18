@@ -87,17 +87,17 @@ $font_size: 14px;
 $item_size: 28px;
 $icon_size: 24px;
 $item_margin: 5px;
-$transition: all 0.3s ease;
 
 div,
 section {
     display: flex;
+    flex-direction: row;
 }
 
 .ehunter-pagination {
+    flex-direction: row;
     justify-content: center;
     align-items: center;
-    transition: $transition;
 
     >span {
         font-size: $font_size;
@@ -105,7 +105,6 @@ section {
         // background: $pagination_item_background_actived__color;
         text-align: center;
         color: $pagination_item_text_normal_color;
-        transition: $transition;
 
         &:hover {
             color: $pagination_item_text_hovered__color;
@@ -122,7 +121,6 @@ section {
         cursor: pointer;
         user-select: none;
         background: transparent;
-        transition: $transition;
 
         &:hover {
             background: $pagination_item_background_hovered__color;

@@ -121,24 +121,23 @@ export function useMagnifier(options: UseMagnifierOptions) {
     }
 
     async function warmMagnifierSource(expectedSrc: string) {
+        // Loading a reader image must not also prepare an unused magnifier.
+        if (!magnifierEnabled.value || !isDesktopPointer.value || !expectedSrc) {
+            return
+        }
         const warmToken = ++magnifierWarmToken.value
         magnifierReady.value = false
         lensWarmState.value = 'pending'
         await nextTick()
         const imgEl = imgRef.value
-        if (!imgEl || imgSrc.value !== expectedSrc) {
+        if (!imgEl || imgSrc.value !== expectedSrc || !magnifierEnabled.value || !isDesktopPointer.value) {
             return
         }
         try {
             await waitForImageLoad(imgEl)
-            if (typeof imgEl.decode === 'function') {
-                try {
-                    await imgEl.decode()
-                } catch (decodeError) {
-                    Logger.logText('MAGNIFIER', `image decode failed: ${String(decodeError)}`)
-                }
-            }
-            if (warmToken !== magnifierWarmToken.value || imgSrc.value !== expectedSrc) {
+            // The loaded element is already usable by drawImage. Let the browser
+            // decode animated GIF/WebP frames as needed during normal playback.
+            if (warmToken !== magnifierWarmToken.value || imgSrc.value !== expectedSrc || imgRef.value !== imgEl || !magnifierEnabled.value || !isDesktopPointer.value) {
                 return
             }
             magnifierReady.value = true
@@ -255,6 +254,9 @@ export function useMagnifier(options: UseMagnifierOptions) {
             void warmMagnifierSource(imgSrc.value)
         }
         if (!enabled) {
+            magnifierWarmToken.value++
+            magnifierReady.value = false
+            lensWarmState.value = 'pending'
             hideMagnifierPointerArtifacts()
         }
     }
@@ -295,7 +297,7 @@ export function useMagnifier(options: UseMagnifierOptions) {
         if (showMagnifierLens.value && lensWarmState.value === 'ready') {
             renderMagnifierCanvas()
         }
-    })
+    }, { flush: 'post' })
 
     watch(imgSrc, (newSrc, oldSrc) => {
         if (newSrc === oldSrc) {
@@ -314,6 +316,7 @@ export function useMagnifier(options: UseMagnifierOptions) {
     })
 
     onBeforeUnmount(() => {
+        magnifierWarmToken.value++
         clearPendingRevealTimer()
         document.removeEventListener('ehunter:magnifier-toggle', onMagnifierToggleSync as EventListener)
     })
