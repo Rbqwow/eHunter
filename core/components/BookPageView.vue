@@ -37,7 +37,6 @@ function onToggleOddEven() {
 
 .book-page-view {
     position: relative;
-    transition: all 0.3s ease;
     user-select: none;
     width: 100%;
     height: 100%;

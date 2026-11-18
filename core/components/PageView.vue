@@ -9,51 +9,49 @@
     @touchmove="onTouchMove"
     @touchend="onTouchEnd"
     @touchcancel="onTouchCancel">
-    <div class="layer preview-layer">
+    <div class="layer preview-layer" v-if="showPlaceholderLayers">
         <ThumbView class="preview-thumb" :thumb-info="store.thumbInfos[index]" />
     </div>
-    <div class="layer loading-layer">
+    <div class="layer loading-layer" v-if="showPlaceholderLayers">
         <h6 class="index">{{ index + 1 }}</h6>
         <article class="loading-info-panel" v-if="active">
-            <transition name="slide-fade">
-                <p class="loading-info" v-if="curLoadStatus!=ImgLoadStatus.Loaded" @click.stop="() => {}">
-                    <span class="text">{{ loadingInfo }}</span>
-                    <span class="operation">
-                        <FlatButton
-                            class="tips tips-down no-margin"
-                            :title-content="i18n.originImgTip"
-                            :label="i18n.originImg"
-                            mode="inline"
-                            type="positive"
-                            v-if="albumService.isSupportOriginImg()"
-                            @click="getNewImgSrc(ImgSrcMode.Origin)" />
-                        <FlatButton
-                            class="tips tips-down"
-                            :title-content="i18n.refreshTip"
-                            :label="i18n.refresh"
-                            mode="inline"
-                            type="positive"
-                            @click="getNewImgSrc(ImgSrcMode.Default)" />
-                        <FlatButton
-                            class="tips tips-down"
-                            :title-content="i18n.refreshByOtherSourceTip"
-                            :label="i18n.refreshByOtherSource"
-                            mode="inline"
-                            type="positive"
-                            v-if="albumService.isSupportImgChangeSource()"
-                            @click="getNewImgSrc(ImgSrcMode.ChangeSource)" />
-                    </span>
-                </p>
-            </transition>
+            <p class="loading-info" @click.stop="() => {}">
+                <span class="text">{{ loadingInfo }}</span>
+                <span class="operation">
+                    <FlatButton
+                        class="tips tips-down no-margin"
+                        :title-content="i18n.originImgTip"
+                        :label="i18n.originImg"
+                        mode="inline"
+                        type="positive"
+                        v-if="albumService.isSupportOriginImg()"
+                        @click="getNewImgSrc(ImgSrcMode.Origin)" />
+                    <FlatButton
+                        class="tips tips-down"
+                        :title-content="i18n.refreshTip"
+                        :label="i18n.refresh"
+                        mode="inline"
+                        type="positive"
+                        @click="getNewImgSrc(ImgSrcMode.Default)" />
+                    <FlatButton
+                        class="tips tips-down"
+                        :title-content="i18n.refreshByOtherSourceTip"
+                        :label="i18n.refreshByOtherSource"
+                        mode="inline"
+                        type="positive"
+                        v-if="albumService.isSupportImgChangeSource()"
+                        @click="getNewImgSrc(ImgSrcMode.ChangeSource)" />
+                </span>
+            </p>
         </article>
     </div>
     <div class="layer img-layer">
         <img
             ref="imgRef"
             class="album-item"
-            v-if="active && imgPageInfo && imgPageInfo.src"
+            v-if="shouldRenderImg"
             :src="imgPageInfo.src"
-            @load="loaded()"
+            @load="loaded($event)"
             @error="failLoad($event)">
     </div>
 
@@ -141,7 +139,7 @@
 import FlatButton from './widget/FlatButton.vue'
 import Popover from './widget/Popover.vue'
 import ThumbView from './ThumbView.vue'
-import { inject, ref, computed, watch, onMounted } from 'vue'
+import { inject, ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { store, storeAction } from '../store/app'
 import { NameAlbumService } from '../service/AlbumService'
 import type { AlbumService } from '../service/AlbumService'
@@ -244,9 +242,49 @@ const {
 
 const showMagnifierZoomActions = computed(() => isDesktopPointer.value && magnifierEnabled.value)
 
+let isMounted = false
+const isInViewport = ref(false)
+const isNearViewport = ref(false)
+let viewportObserver: IntersectionObserver | null = null
+let nearViewportObserver: IntersectionObserver | null = null
+
+function cleanupScrollObservers() {
+    if (viewportObserver) {
+        viewportObserver.disconnect()
+        viewportObserver = null
+    }
+    if (nearViewportObserver) {
+        nearViewportObserver.disconnect()
+        nearViewportObserver = null
+    }
+}
+
+function setupScrollObservers() {
+    cleanupScrollObservers()
+    if (store.readingMode !== 0 || !pageViewRef.value || typeof IntersectionObserver === 'undefined') {
+        return
+    }
+    const scrollRoot = pageViewRef.value.closest('.awesome-scroll-view')
+    viewportObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            isInViewport.value = entry.isIntersecting
+        }
+    }, { root: scrollRoot, rootMargin: '25% 0px' })
+    nearViewportObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            isNearViewport.value = entry.isIntersecting
+        }
+    }, { root: scrollRoot, rootMargin: '150% 0px' })
+    viewportObserver.observe(pageViewRef.value)
+    nearViewportObserver.observe(pageViewRef.value)
+}
+
 const {
     curLoadStatus,
+    hasFirstFrame,
+    isImageDecoded,
     loadingInfo,
+    shouldRenderImg,
     loadImgSrc,
     getNewImgSrc,
     failLoad,
@@ -255,7 +293,22 @@ const {
     index: props.index,
     albumService,
     imgPageInfo,
+    imgRef,
+    isActive: () => isMounted && props.active,
+    activeRef: computed(() => props.active),
+    isInViewport,
+    isNearViewport,
     warmMagnifierSource,
+})
+
+const showPlaceholderLayers = computed(() => {
+    if (curLoadStatus.value === ImgLoadStatus.Error) {
+        return true
+    }
+    if (curLoadStatus.value === ImgLoadStatus.Loaded) {
+        return !isImageDecoded.value && !hasFirstFrame.value
+    }
+    return !hasFirstFrame.value
 })
 
 const {
@@ -271,12 +324,19 @@ const {
 })
 
 onMounted(() => {
+    isMounted = true
+    setupScrollObservers()
     if (props.active && !imgPageInfo.value.src) {
         void loadImgSrc(ImgSrcMode.Default)
     } else if (imgPageInfo.value.src) {
         void warmMagnifierSource(imgPageInfo.value.src)
     }
     setEnabledFromSession(magnifierSessionState.enabled)
+})
+
+onUnmounted(() => {
+    isMounted = false
+    cleanupScrollObservers()
 })
 
 watch(() => props.active, (newVal) => {
@@ -387,7 +447,6 @@ span {
     bottom: 0;
     left: 0;
     right: 0;
-    transition: all 0.3s ease;
     overflow: visible;
     > .layer {
         position: absolute;
@@ -458,6 +517,8 @@ span {
     }
 
     > .img-layer {
+        contain: layout paint style;
+
         > .album-item {
             width: inherit;
             min-width: inherit;
