@@ -257,7 +257,7 @@ function normalizeUpdateMessage(data: any): UpdateMessage | null {
 async function fetchRemoteUpdateMessage(): Promise<UpdateMessage | null> {
     const requestList = [config.updateServer1, config.updateServer2]
         .filter(url => typeof url === 'string' && url.length > 0)
-        .map(url => new TextReq(url, true, true).setCredentials('omit').request())
+        .map(url => new TextReq(url, true, true).setCredentials('omit').setDiagnosticEnabled(false).request())
     if (requestList.length === 0) {
         return null
     }

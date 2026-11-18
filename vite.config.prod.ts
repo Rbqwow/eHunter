@@ -28,6 +28,7 @@ const userscriptBanner = `// ==UserScript==
 // @connect      jp.animesales.xyz
 // @grant        GM_xmlhttpRequest
 // @grant        GM_download
+// @grant        unsafeWindow
 // @license      MIT
 // ==/UserScript==`
 

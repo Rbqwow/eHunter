@@ -1,5 +1,6 @@
 // a service for crossing platform
 /* eslint-disable no-undef */
+import { imageLoadDiagnostics, diagnosticError } from '../../../../core/service/ImageLoadDiagnostics'
 
 // hack for test
 if (typeof chrome === 'undefined') {
@@ -90,27 +91,80 @@ export default {
     getExtension() {
         return chrome.extension;
     },
-    fetch(url, option) {
+    fetch(url, option, diagnosticContext = {}) {
         /* eslint-disable camelcase */
-        if (typeof GM_info !== 'undefined' && GM_info.version) { // the ENV is Tampermonkey
+        const isUserscript = typeof GM_info !== 'undefined' && GM_info.version
+        const diagnosticEnabled = diagnosticContext?.diagnosticEnabled !== false
+        const operation = diagnosticEnabled
+            ? imageLoadDiagnostics.start('transport', {
+                url, ...diagnosticContext, adapter: isUserscript ? 'GM_xmlhttpRequest' : 'fetch',
+            })
+            : undefined
+        if (isUserscript) { // the ENV is Tampermonkey
             return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: option.method,
-                    url,
-                    onload: x => {
-                        let responseText = x.responseText;
-                        x.text = async function() {
-                            return responseText;
-                        }
-                        resolve(x);
-                    },
-                    onerror: e => {
-                        reject(`GM_xhr error, ${e.status}`);
+                try {
+                    GM_xmlhttpRequest({
+                        method: option.method,
+                        url,
+                        onload: x => {
+                            if (operation) {
+                                imageLoadDiagnostics.finish(operation, 'transport.response', {
+                                    url, ...diagnosticContext, status: x.status,
+                                    bodyLength: typeof x.responseText === 'string' ? x.responseText.length : 0,
+                                    finalUrl: x.finalUrl,
+                                })
+                            }
+                            let responseText = x.responseText;
+                            x.text = async function() {
+                                return responseText;
+                            }
+                            resolve(x);
+                        },
+                        onerror: e => {
+                            if (operation) {
+                                imageLoadDiagnostics.finish(operation, 'transport.error', {
+                                    url, ...diagnosticContext, status: e.status,
+                                }, 'error')
+                            }
+                            reject(`GM_xhr error, ${e.status}`);
+                        },
+                        onabort: () => operation && imageLoadDiagnostics.finish(operation, 'transport.abort', { url, ...diagnosticContext }, 'warn'),
+                        ontimeout: () => operation && imageLoadDiagnostics.finish(operation, 'transport.timeout', { url, ...diagnosticContext }, 'warn'),
+                    });
+                } catch (error) {
+                    if (operation) {
+                        imageLoadDiagnostics.finish(operation, 'transport.error', {
+                            url, ...diagnosticContext, error: diagnosticError(error),
+                        }, 'error')
                     }
-                });
+                    throw error
+                }
             });
         } else { // the ENV is Chrome or Firefox
-            return window.fetch(url, option);
+            try {
+                return window.fetch(url, option).then(response => {
+                    if (operation) {
+                        imageLoadDiagnostics.finish(operation, 'transport.response', {
+                            url, ...diagnosticContext, status: response.status, completion: 'headers',
+                        })
+                    }
+                    return response
+                }, error => {
+                    if (operation) {
+                        imageLoadDiagnostics.finish(operation, 'transport.error', {
+                            url, ...diagnosticContext, error: diagnosticError(error),
+                        }, 'error')
+                    }
+                    throw error
+                })
+            } catch (error) {
+                if (operation) {
+                    imageLoadDiagnostics.finish(operation, 'transport.error', {
+                        url, ...diagnosticContext, error: diagnosticError(error),
+                    }, 'error')
+                }
+                throw error
+            }
         }
     }
 };
