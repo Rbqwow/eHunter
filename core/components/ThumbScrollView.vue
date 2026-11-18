@@ -8,14 +8,16 @@
             <div class="header">
                 <DockHandle class="app-name" label="EHUNTER" :aria-label="'EHUNTER Dock Handle'" @drag-start="onDockDragStart" />
             </div>
-            <div class="indicator"></div>
-            <div class="thumb-container" @click="select(i)" v-for="(item, i) of volThumbs" :key="item.id" ref="thumbContainers">
-                <div class="thumb-stage">
-                    <ThumbView class="thumb" :thumb-info="item" />
-                    <div class="hover-mask"></div>
-                    <div class="index">{{ computedVolFirstIndexNum + Number(i) + 1 }}</div>
+            <template v-if="isThumbPanelVisible">
+                <div class="indicator" :style="indicatorStyle"></div>
+                <div class="thumb-container" @click="select(i)" v-for="(item, i) of volThumbs" :key="item.id" :data-thumb-index="i" ref="thumbContainers">
+                    <div class="thumb-stage">
+                        <ThumbView class="thumb" :thumb-info="item" />
+                        <div class="hover-mask"></div>
+                        <div class="index">{{ computedVolFirstIndexNum + Number(i) + 1 }}</div>
+                    </div>
                 </div>
-            </div>
+            </template>
         </AwesomeScrollView>
         <button
             type="button"
@@ -46,7 +48,7 @@ import {
     thumbVerticalItemGap,
     thumbVerticalItemPaddingX,
 } from '../model/layout'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { i18n } from '../store/i18n'
 import ExpandIcon from '../assets/svg/expand.svg?component'
 import ThumbView from './ThumbView.vue'
@@ -78,11 +80,24 @@ const updaterName = 'thumb'
 const scrollView = ref<null | { scrollTo: (offset: number, duration: number, axis: 'x' | 'y') => void }>(null)
 const thumbContainers = ref<HTMLElement[] | null>(null)
 
+const isThumbPanelVisible = computed(() => {
+    if (!store.isSupportThumbView) {
+        return false
+    }
+    return store.readingMode === 0 ? store.showThumbView : store.showBookThumbView
+})
+
 const indicatorOffset = computed(() => {
     if (isDockBottom.value) {
         return thumbContainerWidth.value * activeThumbIndex.value
     }
     return (thumbContainerHeight.value + thumbVerticalItemGap) * activeThumbIndex.value
+})
+
+const indicatorStyle = computed(() => {
+    return isDockBottom.value
+        ? { transform: `translate3d(${indicatorOffset.value}px, 0, 0)` }
+        : { transform: `translate3d(0, ${indicatorOffset.value}px, 0)` }
 })
 
 const volThumbs: any = computed(() => {
@@ -120,31 +135,36 @@ function onClickExpand() {
     emit('open-thumb-expand')
 }
 
-function scrollToActiveThumb(targetIndex: number) {
-    if (!scrollView.value || !thumbContainers.value || targetIndex < 0) {
+function findThumbContainer(targetIndex: number): HTMLElement | undefined {
+    if (!thumbContainers.value) {
+        return undefined
+    }
+    const direct = thumbContainers.value[targetIndex]
+    if (direct && Number(direct.dataset.thumbIndex) === targetIndex) {
+        return direct
+    }
+    return thumbContainers.value.find(el => Number(el.dataset.thumbIndex) === targetIndex)
+}
+
+function scrollToActiveThumb(targetIndex: number, durationOverride?: number) {
+    if (!isThumbPanelVisible.value || !scrollView.value || !thumbContainers.value || targetIndex < 0) {
         return
     }
-    const scrollDuration = store.readingMode === 1 ? 260 : 1000
+    const scrollDuration = durationOverride !== undefined
+        ? durationOverride
+        : (store.readingMode === 1 ? 150 : 600)
+    const target = findThumbContainer(targetIndex)
     if (isDockBottom.value) {
-        const sorted = [...thumbContainers.value].sort((a, b) => a.offsetLeft - b.offsetLeft)
-        const target = sorted[targetIndex]
-        if (target) {
-            scrollView.value.scrollTo(target.offsetLeft, scrollDuration, 'x')
-            return
-        }
-        scrollView.value.scrollTo(0, scrollDuration, 'x')
+        scrollView.value.scrollTo(target ? target.offsetLeft : 0, scrollDuration, 'x')
         return
     }
-    const sorted = [...thumbContainers.value].sort((a, b) => a.offsetTop - b.offsetTop)
-    const target = sorted[targetIndex]
-    if (target) {
-        scrollView.value.scrollTo(target.offsetTop, scrollDuration, 'y')
-        return
-    }
-    scrollView.value.scrollTo(0, scrollDuration, 'y')
+    scrollView.value.scrollTo(target ? target.offsetTop : 0, scrollDuration, 'y')
 }
 
 watch(() => store.curViewIndex, (newVal) => {
+    if (!isThumbPanelVisible.value) {
+        return
+    }
     if (store.curViewIndexUpdater !== updaterName) {
         if (newVal === computedVolFirstIndex.value) {
             scrollToActiveThumb(0)
@@ -152,6 +172,14 @@ watch(() => store.curViewIndex, (newVal) => {
         }
         scrollToActiveThumb(newVal - computedVolFirstIndex.value)
     }
+})
+
+watch(isThumbPanelVisible, async (visible) => {
+    if (!visible) {
+        return
+    }
+    await nextTick()
+    scrollToActiveThumb(activeThumbIndex.value, 0)
 })
 </script>
 
@@ -214,7 +242,7 @@ watch(() => store.curViewIndex, (newVal) => {
             justify-content: center;
             box-sizing: border-box;
             overflow: hidden;
-            transition: all 0.1s ease;
+            transition: background-color 0.1s ease;
 
                 > .thumb-stage {
                     position: relative;
@@ -224,12 +252,10 @@ watch(() => store.curViewIndex, (newVal) => {
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    transition: all 0.2s ease;
 
                     > .thumb {
                         width: 100%;
                         height: 100%;
-                        transition: all 0.5s ease;
                     }
 
                     > .index {
@@ -245,7 +271,7 @@ watch(() => store.curViewIndex, (newVal) => {
                         z-index: 20;
                         user-select: none;
                         cursor: default;
-                        transition: all 0.2s ease;
+                        transition: font-size 0.2s ease, color 0.2s ease;
                     }
                 }
 
@@ -299,10 +325,10 @@ watch(() => store.curViewIndex, (newVal) => {
             border-left: 3px solid rgba(white, 0.4);
             border-right: 3px solid rgba(white, 0.4);
             background: rgba(black, 0.4);
-            transition: all 0.5s ease;
+            transition: transform 0.25s ease;
             // z-index: 10;
             pointer-events: none;
-            top: v-bind('indicatorOffset+"px"');
+            top: 0;
         }
     }
 
@@ -386,7 +412,7 @@ watch(() => store.curViewIndex, (newVal) => {
                 margin-top: 0;
                 margin-left: $header-height;
                 top: 0;
-                left: v-bind('indicatorOffset+"px"');
+                left: 0;
                 width: v-bind('thumbContainerWidth+"px"');
                 height: 100%;
                 border-left: 0;

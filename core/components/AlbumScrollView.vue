@@ -1,10 +1,5 @@
 <template>
     <div class="album-scroll-view">
-        <div class="preload">
-            <div class="preload-item" v-for="i of computedVolPreloadPageIndexList">
-                <PageView :active="true" :index="i" />
-            </div>
-        </div>
         <!-- scroll view -->
         <awesome-scroll-view ref="scrollView" class="scroll-view" v-if="store.imgPageInfos && store.imgPageInfos.length > 0"
             :on-scroll-stopped="onScrollStopped" @topIn="storeAction.setTopBar(true)" :listen-scroll="true"
@@ -27,7 +22,7 @@
 import AwesomeScrollView from './widget/AwesomeScrollView.vue'
 import Pagination from './widget/Pagination.vue'
 import PageView from './PageView.vue'
-import { store, storeAction, computedVolIndex, computedVolFirstIndex, computedVolPageIndexList, computedVolumeSum, computedCurVolNo, computedVolPreloadPageIndexList } from '../store/app'
+import { store, storeAction, computedVolIndex, computedVolFirstIndex, computedVolPageIndexList, computedVolumeSum, computedCurVolNo } from '../store/app'
 import { ref, computed, watch, inject, onMounted, nextTick, onUnmounted } from 'vue'
 
 const updater = 'album_scroll_view'
@@ -42,27 +37,29 @@ function onScrollStopped(position: number) {
 
 // watch scrollPosition to calculate curIndex
 watch(scrollPosition, () => {
-    if (!pageContainers.value) {
+    if (!pageContainers.value || pageContainers.value.length === 0) {
         return
     }
-    // sort again, because if changing volume size, it may be out-of-order
-    let cons = pageContainers.value.sort((a, b) => a.offsetTop - b.offsetTop)
+    // sort a copy because changing volume size can leave template refs out-of-order
+    const cons = [...pageContainers.value].sort((a, b) => a.offsetTop - b.offsetTop)
     let index
-    if (cons) {
-        if (scrollPosition.value !== 0) {
-            // avoiding that in the top, page 1 and page 2 show at the same time, the index is 1
-            const _cons = cons.concat().reverse()
-            let result = cons.indexOf(
-                _cons.find(item => item.offsetTop <= scrollPosition.value + window.innerHeight)
-            );
-            const volIndex = result === -1 ? pageContainers.value.length - 1 : result
-            index = volIndex + computedVolFirstIndex.value
-        } else {
-            index = computedVolFirstIndex.value
+    if (scrollPosition.value !== 0) {
+        // avoiding that in the top, page 1 and page 2 show at the same time, the index is 1
+        const threshold = scrollPosition.value + window.innerHeight
+        let result = -1
+        for (let i = cons.length - 1; i >= 0; i--) {
+            if (cons[i].offsetTop <= threshold) {
+                result = i
+                break
+            }
         }
-        if (index !== store.curViewIndex) {
-            storeAction.setCurViewIndex(index, updater)
-        }
+        const volIndex = result === -1 ? cons.length - 1 : result
+        index = volIndex + computedVolFirstIndex.value
+    } else {
+        index = computedVolFirstIndex.value
+    }
+    if (index !== store.curViewIndex) {
+        storeAction.setCurViewIndex(index, updater)
     }
 })
 
@@ -132,24 +129,6 @@ function selectVol(volIndex: number) {
     height: 100%;
     width: 100%;
 
-    >.preload {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 200px;
-        height: 144px;
-        z-index: -10;
-        opacity: 0;
-        display: flex;
-        flex-direction: row;
-
-        .preload-item {
-            width: 200px;
-            height: 144px;
-            position: relative;
-        }
-    }
-
     >.scroll-view {
         height: 100%;
         width: 100%;
@@ -173,7 +152,8 @@ function selectVol(volIndex: number) {
         }
 
         .page-container {
-            transition: all 0.3s ease;
+            transition: width 0.3s ease, padding-bottom 0.3s ease, margin 0.3s ease;
+            contain: layout style;
             height: 0;
             position: relative;
 
