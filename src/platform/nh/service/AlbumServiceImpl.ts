@@ -153,14 +153,14 @@ export class NHAlbumServiceImpl implements AlbumService {
     return this.imgPageInfos
   }
 
-  async getImgSrc(index: number, mode: ImgSrcMode): Promise<ImgPageInfo | Error> {
+  async getImgSrc(index: number, mode: ImgSrcMode, forceRefresh = false): Promise<ImgPageInfo | Error> {
     try {
       const imgPageInfo = this.imgPageInfos[index]
       if (!imgPageInfo) {
         return new Error(`Image page info not found for index ${index}`)
       }
 
-      if (imgPageInfo.src) {
+      if (!forceRefresh && imgPageInfo.src) {
         return { ...imgPageInfo }
       }
 

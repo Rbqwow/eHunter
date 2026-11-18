@@ -83,7 +83,7 @@ export class TestAlbumService implements AlbumService {
         return this.imgPageInfos
     }
 
-    async getImgSrc(index: number, mode: ImgSrcMode): Promise<ImgPageInfo | Error> {
+    async getImgSrc(index: number, mode: ImgSrcMode, _forceRefresh?: boolean): Promise<ImgPageInfo | Error> {
         // await Util.timeout(30000)
         this.imgPageInfos[index].src = this.imgPageInfos[index].pageUrl
         return this.imgPageInfos[index]

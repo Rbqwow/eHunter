@@ -201,7 +201,7 @@ export class EHAlbumServiceImpl implements AlbumService {
     return this.imgPageInfos
   }
 
-  async getImgSrc(index: number, mode: ImgSrcMode): Promise<ImgPageInfo | Error> {
+  async getImgSrc(index: number, mode: ImgSrcMode, forceRefresh = false): Promise<ImgPageInfo | Error> {
     try {
       const imgPageInfo = this.imgPageInfos[index]
       if (!imgPageInfo) {
@@ -209,8 +209,8 @@ export class EHAlbumServiceImpl implements AlbumService {
       }
 
       // Keep cache hit for default loading, but force re-fetch for
-      // change-source/origin requests.
-      if (imgPageInfo.src && mode !== ImgSrcMode.ChangeSource && mode !== ImgSrcMode.Origin) {
+      // explicit refresh/retry or change-source/origin requests.
+      if (!forceRefresh && imgPageInfo.src && mode !== ImgSrcMode.ChangeSource && mode !== ImgSrcMode.Origin) {
         return imgPageInfo
       }
 

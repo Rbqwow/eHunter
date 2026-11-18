@@ -17,7 +17,7 @@ export interface AlbumService {
 
     getThumbInfos(isDisableCache: boolean): Array<ThumbInfo>
     getImgPageInfos(): Array<ImgPageInfo>
-    getImgSrc(index: number, mode: ImgSrcMode): Promise<ImgPageInfo | Error>
+    getImgSrc(index: number, mode: ImgSrcMode, forceRefresh?: boolean): Promise<ImgPageInfo | Error>
     
     getPreviewThumbnailStyle(index: number): PreviewThumbnailStyle 
 }
